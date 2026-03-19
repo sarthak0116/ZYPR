@@ -1,6 +1,5 @@
 all:
-	gcc -o out main.c zip.c inflate.c
-
+	gcc -o unzip src/main.c src/zip.c src/inflate.c -Iinclude
 
 clean:
-	rm -f out
+	rm -f unzip

@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <stdint.h>
-#include <stdlib.h>   
+#include <stdlib.h>
+#include <string.h>  
 #include "zip.h"
-
+#include "inflate.h"   
 int find_eocd(FILE *fp, EOCD *eocd){
     fseek(fp, 0, SEEK_END);  
     long size = ftell(fp); 
@@ -27,6 +28,10 @@ int read_central_dir(FILE *fp, EOCD *eocd){
         fread(&cd, sizeof(CentralDirHeader), 1, fp);
         char filename[4096] = {0};
         fread(filename, 1, cd.filename_len, fp);
+        if (strstr(filename, "__MACOSX")) {
+            fseek(fp, cd.extra_len + cd.comment_len, SEEK_CUR);
+            continue;
+        }
         printf("%s\n", filename);
         fseek(fp, cd.extra_len + cd.comment_len, SEEK_CUR);
 
@@ -52,11 +57,27 @@ int extract_file(FILE *fp, CentralDirHeader *cd, const char *filename){
     if (!buf) { perror("malloc"); return -1; }
     fread(buf, 1, cd->compressed_size, fp);
 
+    printf("  trying to create: '%s'\n", filename);
     FILE *out = fopen(filename, "wb");
     if (!out) { perror("fopen"); free(buf); return -1; }  
-    fwrite(buf, 1, cd->compressed_size, out);
-    fclose(out);
-    free(buf);
+    if (cd->compression == 0) {
+            fwrite(buf, 1, cd->compressed_size, out);
+        } else if (cd->compression == 8) {
+            uint8_t *out_buf = malloc(cd->uncompressed_size);
+            if (!out_buf) { perror("malloc"); fclose(out); free(buf); return -1; }
+            size_t written = 0;
+            int ret = inflate(buf, cd->compressed_size, out_buf, cd->uncompressed_size, &written);
+            if (ret != 0) {
+                fprintf(stderr, "inflate failed for %s\n", filename);
+            } else {
+                fwrite(out_buf, 1, written, out);
+            }
+            free(out_buf);
+        } else {
+            fprintf(stderr, "unsupported compression %d for %s\n", cd->compression, filename);
+        }
+        fclose(out);
+        free(buf);
 
 
     return 0;

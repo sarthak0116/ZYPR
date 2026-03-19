@@ -1,6 +1,7 @@
 #ifndef INFLATE_H
 #define INFLATE_H
 
+#include "inflate.h" 
 #include <stdint.h>
 #include <stdio.h>
 
