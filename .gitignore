@@ -1,0 +1,7 @@
+unzip
+out
+*.o
+*.a
+abc.txt
+demo/__MACOSX/
+.DS_Store
