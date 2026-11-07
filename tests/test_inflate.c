@@ -38,14 +38,18 @@ int main(int argc, char *argv[]) {
         uint8_t *out = malloc(cap);
         if (!out) { perror("malloc"); return 2; }
         size_t written = 0;
-        /* Truncated input: inflate may return success or failure; it must
-         * simply return, without overrunning the output buffer. */
-        inflate(src, src_len, out, cap, &written);
+        /* Truncated input: inflate must signal an error (not silently
+         * "succeed") and must not overrun the output buffer. */
+        int ret = inflate(src, src_len, out, cap, &written);
+        if (ret == 0) {
+            fprintf(stderr, "FAIL: truncated stream decoded without error\n");
+            return 1;
+        }
         if (written > cap) {
             fprintf(stderr, "FAIL: wrote %zu bytes into a %zu-byte buffer\n", written, cap);
             return 1;
         }
-        printf("PASS: truncated stream terminated safely (written=%zu)\n", written);
+        printf("PASS: truncated stream reported as error, terminated safely (written=%zu)\n", written);
         return 0;
     }
 
