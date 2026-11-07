@@ -39,6 +39,18 @@ zypr -l archive.zip
 zypr -o output_dir archive.zip
 ```
 
+## Testing
+
+Unit tests check the DEFLATE decompressor against zlib-generated known-answer
+vectors (stored, fixed and dynamic Huffman blocks, empty/small/large/random
+inputs). Integration tests extract real ZIP archives created by the system
+`zip` tool and Python's `zipfile`, and compare byte-for-byte against the
+originals. CI runs the full suite on every push and pull request.
+
+```bash
+make test
+```
+
 ## Project Structure
 
 ```
@@ -71,4 +83,3 @@ DEFLATE (used by most ZIP files) combines two algorithms:
 - **Huffman coding** — encodes symbols with variable-length bit codes, shorter for common symbols
 
 Zypr implements the full inflate algorithm including stored blocks, fixed Huffman blocks, and dynamic Huffman blocks.
-
