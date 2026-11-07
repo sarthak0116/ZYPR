@@ -2,8 +2,25 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>  
+#include <sys/stat.h>
+#include <sys/types.h>
 #include "zip.h"
 #include "inflate.h"   
+
+/* Create every directory component of path (like `mkdir -p`). */
+static void make_parent_dirs(const char *path){
+    char buf[4096];
+    size_t len = strlen(path);
+    if (len >= sizeof(buf)) return;
+    strcpy(buf, path);
+    for (char *p = buf + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            mkdir(buf, 0755);
+            *p = '/';
+        }
+    }
+}
 int find_eocd(FILE *fp, EOCD *eocd){
     fseek(fp, 0, SEEK_END);  
     long size = ftell(fp); 
@@ -57,6 +74,12 @@ int extract_file(FILE *fp, CentralDirHeader *cd, const char *filename){
     if (!buf) { perror("malloc"); return -1; }
     fread(buf, 1, cd->compressed_size, fp);
 
+    if (filename[strlen(filename) - 1] == '/') {
+        make_parent_dirs(filename);
+        mkdir(filename, 0755);
+        return 0;
+    }
+    make_parent_dirs(filename);
     printf("  trying to create: '%s'\n", filename);
     FILE *out = fopen(filename, "wb");
     if (!out) { perror("fopen"); free(buf); return -1; }  
