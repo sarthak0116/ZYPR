@@ -7,6 +7,23 @@
 #include "zip.h"
 #include "inflate.h"   
 
+
+/* Reject empty, absolute, drive-prefixed and parent-traversal paths. */
+static int is_unsafe_path(const char *path){
+    size_t len = strlen(path);
+    if (len == 0) return 1;
+    if (path[0] == '/' || path[0] == '\\') return 1;
+    if (len > 1 && path[1] == ':') return 1;
+    const char *p = path;
+    while (*p) {
+        size_t clen = strcspn(p, "/");
+        if (clen == 2 && p[0] == '.' && p[1] == '.') return 1;
+        p += clen;
+        if (*p == '/') p++;
+    }
+    return 0;
+}
+
 /* Create every directory component of path (like `mkdir -p`). */
 static void make_parent_dirs(const char *path){
     char buf[4096];
@@ -74,6 +91,10 @@ int extract_file(FILE *fp, CentralDirHeader *cd, const char *filename){
     if (!buf) { perror("malloc"); return -1; }
     fread(buf, 1, cd->compressed_size, fp);
 
+    if (is_unsafe_path(filename)) {
+        fprintf(stderr, "  skipping unsafe path: '%s'\n", filename);
+        return -1;
+    }
     if (filename[strlen(filename) - 1] == '/') {
         make_parent_dirs(filename);
         mkdir(filename, 0755);
