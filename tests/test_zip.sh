@@ -43,7 +43,7 @@ mkdir out-stored && (cd out-stored && "$ZYPR_BIN" "$WORK/stored.zip" > /dev/null
 check "extract system zip (stored) matches payload" diff -r "$PAYLOAD" out-stored
 
 # --- case 3: zip created by Python's zipfile (different writer) --------------
-python3 - "$WORK/py.zip" "$PAYLOAD" <<'PY'
+python3 - "$WORK/py.zip" "$PAYLOAD" <<'PYGEN'
 import os, sys, zipfile
 target, payload = sys.argv[1], sys.argv[2]
 with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as z:
@@ -51,7 +51,7 @@ with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as z:
         for name in files:
             full = os.path.join(root, name)
             z.write(full, os.path.relpath(full, payload))
-PY
+PYGEN
 mkdir out-py && (cd out-py && "$ZYPR_BIN" "$WORK/py.zip" > /dev/null 2>&1)
 check "extract python zipfile archive matches payload" diff -r "$PAYLOAD" out-py
 
@@ -69,6 +69,37 @@ if [ "$rc" -ne 0 ] && [ "$rc" -lt 126 ]; then
     echo "PASS: non-ZIP input rejected (exit $rc)"
 else
     echo "FAIL: non-ZIP input exit code $rc"
+    failures=$((failures + 1))
+fi
+
+# --- case 6: malicious paths are skipped (zip-slip guard) --------------------
+EVIL="$WORK/evilwork"
+mkdir -p "$EVIL/out"
+python3 - "$WORK/evil.zip" "$WORK" <<'PYEVIL'
+import sys, zipfile
+target, work = sys.argv[1], sys.argv[2]
+with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as z:
+    z.writestr("../evil_escape.txt", "traversal payload")
+    z.writestr(work + "/abs_escape.txt", "absolute payload")
+    z.writestr("safe/ok.txt", "safe payload")
+PYEVIL
+(cd "$EVIL/out" && "$ZYPR_BIN" "$WORK/evil.zip" > /dev/null 2>&1)
+slip=0
+if [ -e "$EVIL/evil_escape.txt" ]; then
+    echo "FAIL: ../ traversal wrote outside cwd"
+    slip=1
+fi
+if [ -e "$WORK/abs_escape.txt" ]; then
+    echo "FAIL: absolute path wrote outside cwd"
+    slip=1
+fi
+if [ ! -f "$EVIL/out/safe/ok.txt" ]; then
+    echo "FAIL: safe entry not extracted"
+    slip=1
+fi
+if [ "$slip" -eq 0 ]; then
+    echo "PASS: traversal and absolute paths skipped, safe entry extracted"
+else
     failures=$((failures + 1))
 fi
 
