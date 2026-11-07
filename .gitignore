@@ -5,3 +5,5 @@ out
 abc.txt
 demo/__MACOSX/
 .DS_Store
+tests/fixtures/
+tests/test_inflate

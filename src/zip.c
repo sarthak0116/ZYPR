@@ -2,8 +2,42 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>  
+#include <sys/stat.h>
+#include <sys/types.h>
 #include "zip.h"
 #include "inflate.h"   
+
+
+/* Reject empty, absolute, drive-prefixed and parent-traversal paths. */
+static int is_unsafe_path(const char *path){
+    size_t len = strlen(path);
+    if (len == 0) return 1;
+    if (path[0] == '/' || path[0] == '\\') return 1;
+    if (len > 1 && path[1] == ':') return 1;
+    const char *p = path;
+    while (*p) {
+        size_t clen = strcspn(p, "/");
+        if (clen == 2 && p[0] == '.' && p[1] == '.') return 1;
+        p += clen;
+        if (*p == '/') p++;
+    }
+    return 0;
+}
+
+/* Create every directory component of path (like `mkdir -p`). */
+static void make_parent_dirs(const char *path){
+    char buf[4096];
+    size_t len = strlen(path);
+    if (len >= sizeof(buf)) return;
+    strcpy(buf, path);
+    for (char *p = buf + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            mkdir(buf, 0755);
+            *p = '/';
+        }
+    }
+}
 int find_eocd(FILE *fp, EOCD *eocd){
     fseek(fp, 0, SEEK_END);  
     long size = ftell(fp); 
@@ -57,6 +91,16 @@ int extract_file(FILE *fp, CentralDirHeader *cd, const char *filename){
     if (!buf) { perror("malloc"); return -1; }
     fread(buf, 1, cd->compressed_size, fp);
 
+    if (is_unsafe_path(filename)) {
+        fprintf(stderr, "  skipping unsafe path: '%s'\n", filename);
+        return -1;
+    }
+    if (filename[strlen(filename) - 1] == '/') {
+        make_parent_dirs(filename);
+        mkdir(filename, 0755);
+        return 0;
+    }
+    make_parent_dirs(filename);
     printf("  trying to create: '%s'\n", filename);
     FILE *out = fopen(filename, "wb");
     if (!out) { perror("fopen"); free(buf); return -1; }  

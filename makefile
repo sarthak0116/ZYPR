@@ -3,3 +3,6 @@ all:
 
 clean:
 	rm -f unzip
+
+test: all
+	bash tests/run_tests.sh
